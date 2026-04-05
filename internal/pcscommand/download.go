@@ -14,7 +14,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 )
 
 type (
@@ -136,10 +135,6 @@ func RunDownload(paths []string, options *DownloadOptions) {
 		statistic = &pcsdownload.DownloadStatistic{}
 	)
 
-	// 处理队列, 小文件优先下载
-	sort.Slice(file_dir_list, func(i, j int) bool {
-		return file_dir_list[i].Size < file_dir_list[j].Size
-	})
 	for _,v := range file_dir_list {
 		newCfg := *cfg
 		unit := pcsdownload.DownloadTaskUnit{

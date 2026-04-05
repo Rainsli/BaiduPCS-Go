@@ -340,16 +340,17 @@ func (pcs *BaiduPCS) recurseMatchPathByShellPattern(index int, patternSlice *[]s
 		return
 	}
 
-	fds, pcsError := pcs.FilesDirectoriesList(strings.Join((*ps)[:index], PathSeparator), DefaultOrderOptions)
+	pcsError := pcs.walkFilesDirectoriesListPages(strings.Join((*ps)[:index], PathSeparator), DefaultOrderOptions, func(fds FileDirectoryList) bool {
+		for k := range fds {
+			if matched, _ := path.Match((*patternSlice)[index], fds[k].Filename); matched {
+				(*ps)[index] = fds[k].Filename
+				pcs.recurseMatchPathByShellPattern(index+1, patternSlice, ps, pcspaths)
+			}
+		}
+		return true
+	})
 	if pcsError != nil {
 		panic(pcsError) // 抛出异常
-	}
-
-	for k := range fds {
-		if matched, _ := path.Match((*patternSlice)[index], fds[k].Filename); matched {
-			(*ps)[index] = fds[k].Filename
-			pcs.recurseMatchPathByShellPattern(index+1, patternSlice, ps, pcspaths)
-		}
 	}
 	return
 }

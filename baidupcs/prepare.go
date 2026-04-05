@@ -159,7 +159,7 @@ func (pcs *BaiduPCS) PrepareFilesDirectoriesBatchMeta(paths ...string) (dataRead
 }
 
 // PrepareFilesDirectoriesList 获取目录下的文件和目录列表, 只返回服务器响应数据和错误信息
-func (pcs *BaiduPCS) PrepareFilesDirectoriesList(path string, options *OrderOptions) (dataReadCloser io.ReadCloser, pcsError pcserror.Error) {
+func (pcs *BaiduPCS) PrepareFilesDirectoriesList(path string, start, limit int, options *OrderOptions) (dataReadCloser io.ReadCloser, pcsError pcserror.Error) {
 	pcs.lazyInit()
 	if options == nil {
 		options = DefaultOrderOptions
@@ -172,6 +172,7 @@ func (pcs *BaiduPCS) PrepareFilesDirectoriesList(path string, options *OrderOpti
 		"path":  path,
 		"by":    *(*string)(unsafe.Pointer(&options.By)),
 		"order": *(*string)(unsafe.Pointer(&options.Order)),
+		"limit": strconv.Itoa(start) + "-" + strconv.Itoa(start+limit-1),
 	})
 	baiduPCSVerbose.Infof("%s URL: %s\n", OperationFilesDirectoriesList, pcsURL)
 
@@ -671,13 +672,13 @@ func (pcs *BaiduPCS) PrepareCloudDlQueryTask(taskIDs string) (dataReadCloser io.
 }
 
 // PrepareCloudDlListTask 查询离线下载任务列表, 只返回服务器响应数据和错误信息
-func (pcs *BaiduPCS) PrepareCloudDlListTask() (dataReadCloser io.ReadCloser, pcsError pcserror.Error) {
+func (pcs *BaiduPCS) PrepareCloudDlListTask(start, limit int) (dataReadCloser io.ReadCloser, pcsError pcserror.Error) {
 	pcs.lazyInit()
 	pcsURL2 := pcs.generatePCSURL2("services/cloud_dl", "list_task", map[string]string{
 		"need_task_info": "1",
 		"status":         "255",
-		"start":          "0",
-		"limit":          "1000",
+		"start":          strconv.Itoa(start),
+		"limit":          strconv.Itoa(limit),
 		"app_id":         PanAppID,
 	})
 	baiduPCSVerbose.Infof("%s URL: %s\n", OperationCloudDlListTask, pcsURL2)

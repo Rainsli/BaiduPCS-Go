@@ -201,44 +201,53 @@ func (pcs *BaiduPCS) CloudDlQueryTask(taskIDs []int64) (cl CloudDlTaskList, pcsE
 
 // CloudDlListTask 查询离线下载任务列表
 func (pcs *BaiduPCS) CloudDlListTask() (cl CloudDlTaskList, pcsError pcserror.Error) {
-	dataReadCloser, pcsError := pcs.PrepareCloudDlListTask()
-	if pcsError != nil {
-		return
-	}
+	const limit = 1000
+	start := 0
+	allTasks := CloudDlTaskList{}
 
-	defer dataReadCloser.Close()
-
-	errInfo := pcserror.NewPCSErrorInfo(OperationCloudDlListTask)
-	taskInfo := cloudDlListTaskJSON{
-		PCSErrInfo: errInfo,
-	}
-
-	pcsError = pcserror.HandleJSONParse(OperationCloudDlListTask, dataReadCloser, &taskInfo)
-	if pcsError != nil {
-		return
-	}
-
-	// 没有任务
-	if len(taskInfo.TaskInfo) <= 0 {
-		return CloudDlTaskList{}, nil
-	}
-	cl = make([]*CloudDlTaskInfo, 0, len(taskInfo.TaskInfo))
-	var v2 *CloudDlTaskInfo
-	for _, v := range taskInfo.TaskInfo {
-		var err error
-		if v == nil {
-			continue
-		}
-		v2 = v.convert()
-		v2.TaskID, err = strconv.ParseInt(v.TaskID, 10, 64)
+	for {
+		dataReadCloser, err := pcs.PrepareCloudDlListTask(start, limit)
 		if err != nil {
-			continue
+			return nil, err
 		}
-		v2.ParseText()
-		cl = append(cl, v2)
+
+		errInfo := pcserror.NewPCSErrorInfo(OperationCloudDlListTask)
+		taskInfo := cloudDlListTaskJSON{
+			PCSErrInfo: errInfo,
+		}
+
+		err = pcserror.HandleJSONParse(OperationCloudDlListTask, dataReadCloser, &taskInfo)
+		dataReadCloser.Close()
+		if err != nil {
+			return nil, err
+		}
+
+		if len(taskInfo.TaskInfo) == 0 {
+			break
+		}
+
+		for _, v := range taskInfo.TaskInfo {
+			var err error
+			if v == nil {
+				continue
+			}
+			v2 := v.convert()
+			v2.TaskID, err = strconv.ParseInt(v.TaskID, 10, 64)
+			if err != nil {
+				continue
+			}
+			v2.ParseText()
+			allTasks = append(allTasks, v2)
+		}
+
+		if len(taskInfo.TaskInfo) < limit {
+			break
+		}
+
+		start += limit
 	}
 
-	return cl, nil
+	return allTasks, nil
 }
 
 func (pcs *BaiduPCS) cloudDlManipTask(op string, taskID int64) (pcsError pcserror.Error) {

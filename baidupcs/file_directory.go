@@ -37,6 +37,8 @@ const (
 type (
 	// HandleFileDirectoryFunc 处理文件或目录的元信息, 返回值控制是否退出递归
 	HandleFileDirectoryFunc func(depth int, fdPath string, fd *FileDirectory, pcsError pcserror.Error) bool
+	// HandleFileDirectoryListPageFunc 处理目录列表的单页结果, 返回值控制是否继续翻页
+	HandleFileDirectoryListPageFunc func(fdl FileDirectoryList) bool
 
 	// FileDirectory 文件或目录的元信息
 	FileDirectory struct {
@@ -155,28 +157,51 @@ func (pcs *BaiduPCS) FilesDirectoriesBatchMeta(paths ...string) (data FileDirect
 	return
 }
 
+func (pcs *BaiduPCS) walkFilesDirectoriesListPages(path string, options *OrderOptions, handlePage HandleFileDirectoryListPageFunc) (pcsError pcserror.Error) {
+	const limit = 1000
+	start := 0
+
+	for {
+		dataReadCloser, err := pcs.PrepareFilesDirectoriesList(path, start, limit, options)
+		if err != nil {
+			return err
+		}
+
+		jsonData := fdData{
+			PCSErrInfo: pcserror.NewPCSErrorInfo(OperationFilesDirectoriesList),
+		}
+
+		err = pcserror.HandleJSONParse(OperationFilesDirectoriesList, dataReadCloser, (*fdDataJSONExport)(unsafe.Pointer(&jsonData)))
+		dataReadCloser.Close()
+		if err != nil {
+			return err
+		}
+
+		if len(jsonData.List) == 0 {
+			return nil
+		}
+
+		jsonData.List.fixMD5()
+		if !handlePage(jsonData.List) {
+			return nil
+		}
+
+		start += len(jsonData.List)
+	}
+}
+
 // FilesDirectoriesList 获取目录下的文件和目录列表
 func (pcs *BaiduPCS) FilesDirectoriesList(path string, options *OrderOptions) (data FileDirectoryList, pcsError pcserror.Error) {
-	dataReadCloser, pcsError := pcs.PrepareFilesDirectoriesList(path, options)
+	allFiles := FileDirectoryList{}
+	pcsError = pcs.walkFilesDirectoriesListPages(path, options, func(fdl FileDirectoryList) bool {
+		allFiles = append(allFiles, fdl...)
+		return true
+	})
 	if pcsError != nil {
 		return nil, pcsError
 	}
 
-	defer dataReadCloser.Close()
-
-	jsonData := fdData{
-		PCSErrInfo: pcserror.NewPCSErrorInfo(OperationFilesDirectoriesList),
-	}
-
-	pcsError = pcserror.HandleJSONParse(OperationFilesDirectoriesList, dataReadCloser, (*fdDataJSONExport)(unsafe.Pointer(&jsonData)))
-	if pcsError != nil {
-		return nil, pcsError
-	}
-
-	// 修复MD5
-	jsonData.List.fixMD5()
-
-	data = jsonData.List
+	data = allFiles
 	return
 }
 
